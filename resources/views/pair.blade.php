@@ -77,7 +77,8 @@
         #candlestickChart {
             width: 100% !important;
             height: 100% !important;
-        }
+             touch-action: none; /* Important for pinch zoom and pan */
+}
     </style>
 </div>
 
@@ -136,41 +137,32 @@ function createChart() {
             parsing: false,
             animation: false,
             plugins: {
-                legend: { display: false },
-                zoom: {
-                    pan: {
-                        enabled: true,
-                        mode: 'x',
-                        onPanStart: ({ chart }) => {
-                            userInteracting = true;
-                            autoScroll = false;
-                            chart.canvas.style.cursor = 'grabbing';
-                            panStartMin = chart.scales.x.min;
-                            panStartMax = chart.scales.x.max;
-                        },
-                        onPan: ({ chart, deltaX }) => {
-                            const scale = chart.scales.x;
-                            const pixelsPerUnit = (scale.right - scale.left) / (panStartMax - panStartMin);
-                            const shift = deltaX / pixelsPerUnit; // convert pixels to time units
-
-                            // Apply the shift to min/max
-                            chart.options.scales.x.min = panStartMin - shift;
-                            chart.options.scales.x.max = panStartMax - shift;
-
-                            chart.update('none');
-                        },
-                        onPanComplete: ({ chart }) => {
-                            chart.canvas.style.cursor = 'grab';
-                        }
-                    },
-                    zoom: {
-                        wheel: { enabled: true },
-                        pinch: { enabled: true },
-                        mode: 'x',
-                        onZoomStart: () => { userInteracting = true; autoScroll = false; }
-                    }
-                }
+    legend: { display: false },
+    zoom: {
+        pan: {
+            enabled: true,
+            mode: 'x',
+            modifierKey: null, // Allow pan without pressing shift/alt
+            overScaleMode: 'x',
+            onPanStart: ({ chart }) => {
+                userInteracting = true;
+                autoScroll = false;
+                chart.canvas.style.cursor = 'grabbing';
             },
+            onPanComplete: ({ chart }) => {
+                chart.canvas.style.cursor = 'grab';
+            }
+        },
+        zoom: {
+            wheel: { enabled: true }, // Mouse wheel zoom for desktop
+            pinch: { enabled: true }, // Enables pinch zoom for mobile
+            mode: 'x',
+            drag: false, // Avoid conflicts with touch scroll
+            onZoomStart: () => { userInteracting = true; autoScroll = false; }
+        }
+    }
+},
+
             scales: {
                 x: {
                     type: 'time',
