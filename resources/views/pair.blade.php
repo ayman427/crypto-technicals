@@ -118,6 +118,11 @@ tickerWs.onmessage = (event) => {
 let userInteracting = false; // Track if user is panning/zooming
 let autoScroll = true;       // Auto-follow latest candle unless user moves
 
+let isDragging = false;
+let startX = 0;
+let startMin = 0;
+let startMax = 0;
+
 function createChart() {
     if (chart) chart.destroy();
     const ctx = document.getElementById('candlestickChart').getContext('2d');
@@ -137,32 +142,18 @@ function createChart() {
             parsing: false,
             animation: false,
             plugins: {
-    legend: { display: false },
-    zoom: {
-        pan: {
-            enabled: true,
-            mode: 'x',
-            modifierKey: null, // Allow pan without pressing shift/alt
-            overScaleMode: 'x',
-            onPanStart: ({ chart }) => {
-                userInteracting = true;
-                autoScroll = false;
-                chart.canvas.style.cursor = 'grabbing';
+                legend: { display: false },
+                zoom: {
+                    pan: { enabled: false }, // disable default pan to implement custom
+                    zoom: {
+                        wheel: { enabled: true }, // Mouse wheel zoom
+                        pinch: { enabled: true }, // Pinch zoom
+                        mode: 'x',
+                        drag: false,
+                        onZoomStart: () => { userInteracting = true; autoScroll = false; }
+                    }
+                }
             },
-            onPanComplete: ({ chart }) => {
-                chart.canvas.style.cursor = 'grab';
-            }
-        },
-        zoom: {
-            wheel: { enabled: true }, // Mouse wheel zoom for desktop
-            pinch: { enabled: true }, // Enables pinch zoom for mobile
-            mode: 'x',
-            drag: false, // Avoid conflicts with touch scroll
-            onZoomStart: () => { userInteracting = true; autoScroll = false; }
-        }
-    }
-},
-
             scales: {
                 x: {
                     type: 'time',
@@ -179,8 +170,57 @@ function createChart() {
     });
 
     chart.canvas.style.cursor = 'grab';
-}
 
+    // --- Desktop Drag Navigation ---
+    const canvas = chart.canvas;
+    canvas.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        startX = e.clientX;
+        startMin = chart.scales.x.min;
+        startMax = chart.scales.x.max;
+        canvas.style.cursor = 'grabbing';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+        const scale = chart.scales.x;
+        const delta = e.clientX - startX;
+        const pixelsPerUnit = (scale.right - scale.left) / (startMax - startMin);
+        const shift = delta / pixelsPerUnit;
+        chart.options.scales.x.min = startMin - shift;
+        chart.options.scales.x.max = startMax - shift;
+        chart.update('none');
+    });
+
+    window.addEventListener('mouseup', () => {
+        if (isDragging) {
+            isDragging = false;
+            canvas.style.cursor = 'grab';
+        }
+    });
+
+    // --- Mobile One-Finger Drag ---
+    let touchStartX = 0;
+    canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            touchStartX = e.touches[0].clientX;
+            startMin = chart.scales.x.min;
+            startMax = chart.scales.x.max;
+        }
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        const delta = e.touches[0].clientX - touchStartX;
+        const scale = chart.scales.x;
+        const pixelsPerUnit = (scale.right - scale.left) / (startMax - startMin);
+        const shift = delta / pixelsPerUnit;
+        chart.options.scales.x.min = startMin - shift;
+        chart.options.scales.x.max = startMax - shift;
+        chart.update('none');
+    }, { passive: false });
+}
 
 async function loadCandles(selectedInterval) {
     const res = await fetch(`https://api.binance.com/api/v3/klines?symbol=${restSymbol}&interval=${selectedInterval}&limit=500`);
@@ -206,7 +246,6 @@ async function loadMoreHistoricalCandles(selectedInterval, endTime) {
     candleData = [...olderData, ...candleData];
     chart.config.data.datasets[0].data = candleData;
 
-    // Keep the current view where the user left off
     const scale = chart.scales.x;
     chart.options.scales.x.min = earliestTime;
     chart.options.scales.x.max = scale.max;
@@ -244,7 +283,7 @@ document.querySelectorAll('.timeframe-btn').forEach(btn => {
         document.querySelectorAll('.timeframe-btn').forEach(b => b.classList.remove('bg-indigo-500', 'text-white'));
         btn.classList.add('bg-indigo-500', 'text-white');
         interval = btn.dataset.interval;
-        autoScroll = true; // Reset auto-scroll when switching intervals
+        autoScroll = true;
         await loadCandles(interval);
         startCandleWebSocket(interval);
     });
