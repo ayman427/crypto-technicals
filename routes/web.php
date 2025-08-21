@@ -25,6 +25,9 @@ Route::middleware(['auth'])->group(function () {
 // optional json api endpoints if you want them
     Route::get('/api/ticker/{symbol}', [BinanceController::class, 'ticker']);
     Route::get('/api/klines/{symbol}/{interval?}', [BinanceController::class, 'klines']);
+
+    Route::get('/pair/{symbol}/chart', [BinanceController::class, 'chart'])->name('pair.chart');
+
 });
 
 require __DIR__ . '/auth.php';

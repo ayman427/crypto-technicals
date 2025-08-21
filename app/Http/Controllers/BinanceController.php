@@ -59,4 +59,14 @@ class BinanceController extends Controller
     {
         return response()->json($this->binance->getTicker24hr($symbol));
     }
+
+    public function chart($symbol)
+    {
+        // Fetch pair info using your existing logic
+        $exchangeInfo = json_decode(file_get_contents('https://api.binance.com/api/v3/exchangeInfo'), true);
+        $pair         = collect($exchangeInfo['symbols'])->first(fn($s) => $s['symbol'] === strtoupper($symbol));
+
+        return view('pair_chart', compact('pair'));
+    }
+
 }
