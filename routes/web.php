@@ -8,7 +8,7 @@ Route::get('/', function () {
     return view('welcome');
 })->name('home');
 
-Route::view('dashboard', 'dashboard')
+Route::get('/dashboard', [BinanceController::class, 'dashboard'])
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
 

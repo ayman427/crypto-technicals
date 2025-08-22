@@ -3,6 +3,7 @@ namespace App\Http\Controllers;
 
 use App\Services\BinanceService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 
 class BinanceController extends Controller
 {
@@ -67,6 +68,49 @@ class BinanceController extends Controller
         $pair         = collect($exchangeInfo['symbols'])->first(fn($s) => $s['symbol'] === strtoupper($symbol));
 
         return view('pair_chart', compact('pair'));
+    }
+
+    public function dashboard()
+    {
+        $response = Http::get('https://api.binance.com/api/v3/ticker/24hr');
+
+        if ($response->failed()) {
+            return view('dashboard', [
+                'topGainers'    => collect(),
+                'topLosers'     => collect(),
+                'volumeGainers' => collect(),
+            ]);
+        }
+
+        $excluded = ['BUSDUSDT', 'FDUSDUSDT', 'USDCUSDT'];
+
+        $data = collect($response->json())
+            ->filter(fn($row) =>
+                isset($row['symbol']) &&
+                str_ends_with($row['symbol'], 'USDT') &&
+                ! in_array($row['symbol'], $excluded)
+            )
+            ->map(function ($row) {
+                $last = (float) ($row['lastPrice'] ?? 0);
+                $open = (float) ($row['openPrice'] ?? 0);
+
+                return [
+                    'symbol'             => $row['symbol'],
+                    'lastPrice'          => $last,
+                    'priceChange'        => $last - $open,
+                    'priceChangePercent' => isset($row['priceChangePercent']) ? (float) $row['priceChangePercent'] : 0,
+                    'highPrice'          => (float) ($row['highPrice'] ?? 0),
+                    'lowPrice'           => (float) ($row['lowPrice'] ?? 0),
+                    'quoteVolume'        => (float) ($row['quoteVolume'] ?? 0),
+                ];
+            })
+            ->filter(fn($row) => $row['lastPrice'] > 0 && $row['quoteVolume'] > 1000000); // Only active pairs
+
+        $topGainers    = $data->sortByDesc(fn($c) => $c['priceChangePercent'] * log1p($c['quoteVolume']))->take(10);
+        $topLosers     = $data->sortBy('priceChangePercent')->take(10);
+        $volumeGainers = $data->sortByDesc('quoteVolume')->take(10);
+
+        return view('dashboard', compact('topGainers', 'topLosers', 'volumeGainers'));
     }
 
 }
